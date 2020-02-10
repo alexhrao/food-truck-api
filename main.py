@@ -19,9 +19,16 @@ class LiveView(Resource):
             'data': file_data,
             'time': last_view['time_updated'].isoformat()
         })
-        
+
+class Views(Resource):
+    def get(self):
+        docs = [{ 'id': d.id, 'display': d.get().to_dict()['display_name'] } for d in db.collection('last-view').list_documents()]
+        print(docs)
+        return docs
+
 
 api.add_resource(LiveView, '/api/views/<string:view>')
+api.add_resource(Views, '/api/views')
 
 if __name__=='__main__':
     app.run(host='127.0.0.1', port=8080, debug=False)
