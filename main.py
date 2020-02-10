@@ -1,11 +1,13 @@
 from flask import Flask
 from flask_restful import Resource, Api
 from google.cloud import storage, firestore
+from flask_cors import CORS
 import base64
 
 db = firestore.Client()
 
 app = Flask(__name__)
+CORS(app)
 api = Api(app)
 
 class LiveView(Resource):
