@@ -14,6 +14,11 @@ class LiveView(Resource):
     def get(self, view):
         doc_ref = db.collection(u'last-view').document(view)
         last_view = doc_ref.get().to_dict()
+        if last_view['filename'] is None or last_view['filename'] == '':
+            return ({
+                'data': '',
+                'time': '',
+            })
         file_data = str(base64.b64encode(storage.Client().bucket(view).blob(last_view['filename']).download_as_string()), encoding='utf-8')
         return ({
             'data': file_data,
