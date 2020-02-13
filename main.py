@@ -81,6 +81,7 @@ class ImageDocument(Resource):
                 'values': labelGroup.get('values')
             })
         return out
+    # TODO: Post request with label data
 
 @app.route('/api/snapshots/<string:bucket_name>/<string:image_name>')
 def snapshot(bucket_name, image_name):
