@@ -123,5 +123,13 @@ def snapshot(bucket_name, image_name):
     resp.headers['Content-Type'] = file_ref.content_type
     return resp
 
+@app.route('/api/labels')
+def get_labels():
+    out = list()
+    for label in db.collection('label-groups').stream():
+        tmp = label.to_dict()
+        tmp['name'] = label.id
+        out.append(tmp)
+    return json.dumps(out)
 if __name__=='__main__':
-    app.run(host='127.0.0.1', port=8080, debug=True)
+    app.run(host='127.0.0.1', port=8080, debug=False)
