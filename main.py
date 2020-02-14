@@ -11,23 +11,23 @@ CORS(app)
 
 @app.route('/api/views/<string:view>')
 def get_live_view(view):
-    doc_ref = db.collection(u'last-view').document(view)
-    last_view = doc_ref.get().to_dict()
-    if last_view['filename'] is None or last_view['filename'] == '':
+    doc = db.collection('images').document(view).get()
+    filename = doc.get('lastSnapshot.filename')
+    time_updated = doc.get('lastSnapshot.updateTime')
+    if filename is None or filename == '':
         return ({
             'data': '',
             'time': '',
         })
-    file_data = str(base64.b64encode(storage.Client().bucket(view).blob(last_view['filename']).download_as_string()), encoding='utf-8')
+    file_data = str(base64.b64encode(storage.Client().bucket(view).blob(filename).download_as_string()), encoding='utf-8')
     return ({
         'data': file_data,
-        'time': last_view['time_updated'].isoformat()
+        'time': time_updated.isoformat()
     })
 @app.route('/api/views')
 def get_views():
     docs = [{ 'id': d.id, 'display': d.get().to_dict()['display_name'] } for d in db.collection('last-view').list_documents()]
-    print(docs)
-    return docs
+    return json.dumps(docs)
 
 # Image Document output looks like this:
 """
