@@ -1,35 +1,33 @@
-from flask import Flask, Response
-from flask_restful import Resource, Api
+from flask import Flask, Response, request
 from google.cloud import storage, firestore
 from flask_cors import CORS
 import base64
+import json
 
 db = firestore.Client()
 
 app = Flask(__name__)
 CORS(app)
-api = Api(app)
 
-class LiveView(Resource):
-    def get(self, view):
-        doc_ref = db.collection(u'last-view').document(view)
-        last_view = doc_ref.get().to_dict()
-        if last_view['filename'] is None or last_view['filename'] == '':
-            return ({
-                'data': '',
-                'time': '',
-            })
-        file_data = str(base64.b64encode(storage.Client().bucket(view).blob(last_view['filename']).download_as_string()), encoding='utf-8')
+@app.route('/api/views/<string:view>')
+def get_live_view(view):
+    doc_ref = db.collection(u'last-view').document(view)
+    last_view = doc_ref.get().to_dict()
+    if last_view['filename'] is None or last_view['filename'] == '':
         return ({
-            'data': file_data,
-            'time': last_view['time_updated'].isoformat()
+            'data': '',
+            'time': '',
         })
-
-class Views(Resource):
-    def get(self):
-        docs = [{ 'id': d.id, 'display': d.get().to_dict()['display_name'] } for d in db.collection('last-view').list_documents()]
-        print(docs)
-        return docs
+    file_data = str(base64.b64encode(storage.Client().bucket(view).blob(last_view['filename']).download_as_string()), encoding='utf-8')
+    return ({
+        'data': file_data,
+        'time': last_view['time_updated'].isoformat()
+    })
+@app.route('/api/views')
+def get_views():
+    docs = [{ 'id': d.id, 'display': d.get().to_dict()['display_name'] } for d in db.collection('last-view').list_documents()]
+    print(docs)
+    return docs
 
 # Image Document output looks like this:
 """
@@ -52,35 +50,69 @@ class Views(Resource):
     ]
 }
 """
-class ImageDocument(Resource):
-    def get(self, bucket_name='', image_name=''):
-        if bucket_name == '':
-            # No bucket - just get the first one that hasn't been seen!
-            docs = list(db.collection_group('labels').where('seen', '==', False).limit(1).stream())
-            if len(docs) == 0:
-                return {}
-            doc = docs[0]
-            return self.get(doc.get('bucket'), doc.id)
-        doc_ref = db.collection('images').document(bucket_name).collection('labels').document(image_name)
-        doc = doc_ref.get()
-        if not doc.exists:
+@app.route('/api/images/<string:bucket_name>/<string:image_name>', methods=['GET'])
+def get_image_metadata(bucket_name='', image_name=''):
+    if bucket_name == '':
+        # No bucket - just get the first one that hasn't been seen!
+        docs = list(db.collection_group('labels').where('seen', '==', False).limit(1).stream())
+        if len(docs) == 0:
             return {}
-        out = {
-            'key': image_name,
-            'bucket': bucket_name,
-            'filename': '{0}.png'.format(image_name),
-            'valid': doc.get('valid'),
-            'seen': doc.get('seen'),
-            'labels': list()
-        }
-        for labelGroup in doc.get('labels'):
-            label = labelGroup.get('group').get()
-            out['labels'].append({
-                'groupName': label.id,
-                'groupType': label.get('groupType'),
-                'values': labelGroup.get('values')
+        doc = docs[0]
+        return get_image_metadata(doc.get('bucket'), doc.id)
+    doc_ref = db.collection('images').document(bucket_name).collection('labels').document(image_name)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return {}
+    out = {
+        'key': image_name,
+        'bucket': bucket_name,
+        'filename': '{0}.png'.format(image_name),
+        'valid': doc.get('valid'),
+        'seen': doc.get('seen'),
+        'labels': list()
+    }
+    for labelGroup in doc.get('labels'):
+        label = labelGroup.get('group').get()
+        out['labels'].append({
+            'groupName': label.id,
+            'groupType': label.get('groupType'),
+            'values': labelGroup.get('values')
+        })
+    return out
+
+@app.route('/api/images/', methods=['GET'])
+def get_next_image():
+    return get_image_metadata()
+
+@app.route('/api/images/<string:bucket_name>/<string:image_name>', methods=['PUT'])
+def update_image_metadata(bucket_name, image_name):
+    labels = request.get_json(force=True)
+    doc_ref = db.collection('images').document(bucket_name).collection('labels').document(image_name)
+    doc = doc_ref.get()
+    curr_label_groups = list(doc.get('labels'))
+    curr_labels = [ lab.get('group').id for lab in doc.get('labels')]
+    if len(labels) == 0:
+        doc_ref.update({ 'valid': False })
+    else:
+        doc_ref.update({ 'valid': True })
+    for label in labels:
+        # each label looks like { labelGroup: 'group-name', value: val }
+        group_ref = db.collection('label-groups').document(label['labelGroup'])
+        if label['labelGroup'] in curr_labels:
+            ind = curr_labels.index(label['labelGroup'])
+            tmp = curr_label_groups.pop(ind)
+            doc_ref.update({
+                'labels': firestore.ArrayRemove([tmp])
             })
-        return out
+        doc_ref.update({
+            'labels': firestore.ArrayUnion([{
+                'group': group_ref,
+                'values': label['value']
+            }])
+        })
+    doc_ref.update({ 'seen': True })
+
+    return {}
     # TODO: Post request with label data
 
 @app.route('/api/snapshots/<string:bucket_name>/<string:image_name>')
@@ -90,10 +122,6 @@ def snapshot(bucket_name, image_name):
     resp = Response(file_data)
     resp.headers['Content-Type'] = file_ref.content_type
     return resp
-
-api.add_resource(LiveView, '/api/views/<string:view>')
-api.add_resource(Views, '/api/views')
-api.add_resource(ImageDocument, '/api/images/<string:bucket_name>/<string:image_name>', '/api/images/')
 
 if __name__=='__main__':
     app.run(host='127.0.0.1', port=8080, debug=True)
