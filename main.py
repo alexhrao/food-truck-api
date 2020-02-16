@@ -3,6 +3,7 @@ from google.cloud import storage, firestore
 from flask_cors import CORS
 import base64
 import json
+from datetime import datetime, timedelta
 
 db = firestore.Client()
 
@@ -56,8 +57,12 @@ def get_image_metadata(bucket_name='', image_name=''):
         # No bucket - just get the first one that hasn't been seen!
         docs = list(db.collection_group('labels').where('seen', '==', False).limit(1).stream())
         if len(docs) == 0:
-            return {}
+            # cleanup - see if there are any whose lastSeen is greater than 30 seconds ago
+            docs = list(db.collection_group('labels').where('lastSeen', '!=', None).where('lastSeen', '<', datetime.now() - timedelta(seconds=30)).limit(1).stream())
+            if len(docs) == 0:
+                return {}
         doc = docs[0]
+        doc.reference.update({ 'lastSeen': datetime.now(), 'seen': True })
         return get_image_metadata(doc.get('bucket'), doc.id)
     doc_ref = db.collection('images').document(bucket_name).collection('labels').document(image_name)
     doc = doc_ref.get()
@@ -110,7 +115,7 @@ def update_image_metadata(bucket_name, image_name):
                 'values': label['value']
             }])
         })
-    doc_ref.update({ 'seen': True })
+    doc_ref.update({ 'seen': True, 'lastSeen': None })
 
     return {}
     # TODO: Post request with label data
