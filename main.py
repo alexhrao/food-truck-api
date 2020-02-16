@@ -40,12 +40,12 @@ def get_views():
         {
             'groupName': 'group-name',
             'groupType': 'single'|'multiple'|'numeric'
-            'values': 'label-name'|['label-names']|number
+            'labels': 'label-name'|['label-names']|number
         },
         {
             'groupName': 'group-name',
             'groupType': 'single'|'multiple'|'numeric'
-            'values': 'label-name'|['label-names']|number
+            'labels': 'label-name'|['label-names']|number
         },...
     ]
 }
@@ -76,7 +76,7 @@ def get_image_metadata(bucket_name='', image_name=''):
         out['labels'].append({
             'groupName': label.id,
             'groupType': label.get('groupType'),
-            'values': labelGroup.get('values')
+            'labels': labelGroup.get('values')
         })
     return out
 
@@ -128,7 +128,7 @@ def get_labels():
     out = list()
     for label in db.collection('label-groups').stream():
         tmp = label.to_dict()
-        tmp['name'] = label.id
+        tmp['groupName'] = label.id
         out.append(tmp)
     return json.dumps(out)
 if __name__=='__main__':
