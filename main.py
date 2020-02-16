@@ -76,7 +76,7 @@ def get_image_metadata(bucket_name='', image_name=''):
         out['labels'].append({
             'groupName': label.id,
             'groupType': label.get('groupType'),
-            'labels': labelGroup.get('values')
+            'value': labelGroup.get('values')
         })
     return out
 
@@ -96,10 +96,10 @@ def update_image_metadata(bucket_name, image_name):
     else:
         doc_ref.update({ 'valid': True })
     for label in labels:
-        # each label looks like { labelGroup: 'group-name', value: val }
-        group_ref = db.collection('label-groups').document(label['labelGroup'])
-        if label['labelGroup'] in curr_labels:
-            ind = curr_labels.index(label['labelGroup'])
+        # each label looks like { groupName: 'group-name', value: val }
+        group_ref = db.collection('label-groups').document(label['groupName'])
+        if label['groupName'] in curr_labels:
+            ind = curr_labels.index(label['groupName'])
             tmp = curr_label_groups.pop(ind)
             doc_ref.update({
                 'labels': firestore.ArrayRemove([tmp])
@@ -127,9 +127,7 @@ def snapshot(bucket_name, image_name):
 def get_labels():
     out = list()
     for label in db.collection('label-groups').stream():
-        tmp = label.to_dict()
-        tmp['groupName'] = label.id
-        out.append(tmp)
+        out.append(label.to_dict())
     return json.dumps(out)
 if __name__=='__main__':
     app.run(host='127.0.0.1', port=8080, debug=False)
