@@ -95,23 +95,22 @@ def update_image_metadata(bucket_name, image_name):
     doc_ref = db.collection('images').document(bucket_name).collection('labels').document(image_name)
     doc = doc_ref.get()
     curr_label_groups = list(doc.get('labels'))
-    curr_labels = [ lab.get('group').id for lab in doc.get('labels')]
+    curr_labels = [ lab.get('group') for lab in doc.get('labels') ]
     if len(labels) == 0:
         doc_ref.update({ 'valid': False })
     else:
         doc_ref.update({ 'valid': True })
     for label in labels:
         # each label looks like { groupName: 'group-name', value: val }
-        group_ref = db.collection('label-groups').document(label['groupName'])
-        if label['groupName'] in curr_labels:
-            ind = curr_labels.index(label['groupName'])
+        if label['groupId'] in curr_labels:
+            ind = curr_labels.index(label['groupId'])
             tmp = curr_label_groups.pop(ind)
             doc_ref.update({
                 'labels': firestore.ArrayRemove([tmp])
             })
         doc_ref.update({
             'labels': firestore.ArrayUnion([{
-                'group': group_ref,
+                'group': label['groupId'],
                 'values': label['value']
             }])
         })
@@ -132,7 +131,34 @@ def snapshot(bucket_name, image_name):
 def get_labels():
     out = list()
     for label in db.collection('label-groups').stream():
-        out.append(label.to_dict())
+        tmp = label.to_dict()
+        tmp['groupId'] = label.id
+        out.append(tmp)
     return json.dumps(out)
+
+"""
+gsPath,url,label
+"""
+@app.route('/api/classified')
+def get_classified():
+    # get all documents; then filter
+    docs = db.collection_group('labels').where('valid', '==', True).where('seen', '==', True).stream()
+    label = request.args.get('label')
+    def get_line():
+        for doc in docs:
+            doc_labels = doc.get('labels')
+            for dl in doc_labels:
+                lbl = dl.get('group')
+                if (lbl == label) & (label == 'truck-name'):
+                    yield '"gs://{0}/{1}.png","https://food-truck-spy.appspot.com/api/snapshots/{0}/{1}","{2}"\n'.format(doc.get('bucket'), doc.id, dl.get('values'))
+                    break
+                elif (lbl == label) & (label == 'num-waiting'):
+                    yield '"gs://{0}/{1}.png","https://food-truck-spy.appspot.com/api/snapshots/{0}/{1}",{2}\n'.format(doc.get('bucket'), doc.id, dl.get('values'))
+                    break
+                elif (lbl == label) & (label == 'line-time'):
+                    yield '"gs://{0}/{1}.png","https://food-truck-spy.appspot.com/api/snapshots/{0}/{1}",{2}\n'.format(doc.get('bucket'), doc.id, dl.get('values'))
+                    break
+    return Response(get_line(), mimetype='text/csv')
+
 if __name__=='__main__':
-    app.run(host='127.0.0.1', port=8080, debug=False)
+    app.run(host='127.0.0.1', port=8080, debug=True)
