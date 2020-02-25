@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 if __name__ == '__main__':
     db = firestore.Client()
     store = storage.Client()
-    docs = db.collection_group('labels').where('valid', '==', False).where('seen', '==', True).limit(1).stream()
+    docs = db.collection_group('labels').where('valid', '==', False).where('seen', '==', True).stream()
     for doc in docs:
         print(doc.id)
         blob = store.bucket(doc.get('bucket')).blob(doc.get('filename'))
